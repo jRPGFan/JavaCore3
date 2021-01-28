@@ -8,7 +8,6 @@ import ru.geekbrains.java_two.network.SocketThreadListener;
 
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.sql.SQLException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Vector;
@@ -128,14 +127,18 @@ public class ChatServer implements ServerSocketThreadListener, SocketThreadListe
                 sendToAllAuthorizedClients(Protocol.getTypeBroadcast(client.getNickname(), arr[1]));
                 break;
             case Protocol.USER_NICKNAME_CHANGE:
-                try {
-                    if (SqlClient.changeNickname(client.getNickname(), arr[1])) {
-                        client.changeNickname(arr[1]);
-                        sendToAllAuthorizedClients(Protocol.getUserList(getUsers()));
-                    }
-                } catch (SQLException throwables) {
-                    throwables.printStackTrace();
+                String currentNickname = client.getNickname();
+                int result = SqlClient.changeNickname(currentNickname, arr[1]);
+
+                if (result == 1) {
+                    client.changeNickname(arr[1]);
+                    sendToAllAuthorizedClients(Protocol.getTypeBroadcast("Server", currentNickname +
+                            " is now known as " + arr[1]));
+                    sendToAllAuthorizedClients(Protocol.getUserList(getUsers()));
+                } else if (result == -1){
+                        client.nickNameAlreadyInUse("nickname " + arr[1] + " is already in use");
                 }
+
                 break;
             default:
                 client.msgFormatError(msg);

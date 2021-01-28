@@ -8,12 +8,14 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.io.FileWriter;
-import java.io.IOException;
+import java.io.*;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
+import java.util.List;
 
 public class ClientGUI extends JFrame implements ActionListener,
         Thread.UncaughtExceptionHandler, SocketThreadListener {
@@ -22,6 +24,8 @@ public class ClientGUI extends JFrame implements ActionListener,
     private static final int HEIGHT = 300;
     private static final String WINDOW_TITLE = "Chat client";
     private final DateFormat DATE_FORMAT = new SimpleDateFormat("[HH:mm:ss] ");
+    private String nickname = "";
+    private boolean loggedIn = false;
 
     private final JTextArea log = new JTextArea();
 
@@ -101,6 +105,7 @@ public class ClientGUI extends JFrame implements ActionListener,
         } else if (src == btnSend || src == tfMessage) {
             sendMessage();
         } else if (src == btnLogin) {
+            log.setText(null);
             connect();
         } else if (src == btnDisconnect) {
             socketThread.close();
@@ -132,15 +137,38 @@ public class ClientGUI extends JFrame implements ActionListener,
 //        wrtMsgToLogFile(msg, username);
     }
 
-    private void wrtMsgToLogFile(String msg, String username) {
-        try (FileWriter out = new FileWriter("log.txt", true)) {
-            out.write(username + ": " + msg + "\n");
+    private void wrtMsgToLogFile(String msg) {
+        try (FileWriter out = new FileWriter(nickname + ".txt", true)) {
+            out.write(msg + "\n");
             out.flush();
         } catch (IOException e) {
             if (!shownIoErrors) {
                 shownIoErrors = true;
                 showException(Thread.currentThread(), e);
             }
+        }
+    }
+
+    private void readLogFileToLog(){
+        File historyFile = new File(nickname + ".txt");
+
+        if (historyFile.exists()){
+            try {
+                List<String> historyLines = Files.readAllLines(historyFile.toPath(), StandardCharsets.UTF_8);
+                StringBuilder strBuild = new StringBuilder();
+
+                int startingPosition = 0;
+                if(historyLines.size() > 100) startingPosition = historyLines.size() - 100;
+
+                for (int i = startingPosition; i<historyLines.size();i++)
+                    strBuild.append(historyLines.get(i)).append("\n");
+                putLog(strBuild.toString());
+
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        } else {
+            putLog("log not found and will be created with the next message");
         }
     }
 
@@ -153,6 +181,7 @@ public class ClientGUI extends JFrame implements ActionListener,
                 log.setCaretPosition(log.getDocument().getLength());
             }
         });
+        if (loggedIn) wrtMsgToLogFile(msg);
     }
 
     private void showException(Thread t, Throwable e) {
@@ -190,6 +219,7 @@ public class ClientGUI extends JFrame implements ActionListener,
         panelTop.setVisible(true);
         setTitle(WINDOW_TITLE);
         userList.setListData(new String[0]);
+        loggedIn = false;
     }
 
     @Override
@@ -212,6 +242,9 @@ public class ClientGUI extends JFrame implements ActionListener,
                 setTitle(WINDOW_TITLE + " nickname: " + arr[1]);
                 panelBottom.setVisible(true);
                 panelTop.setVisible(false);
+                nickname = arr[1];
+                readLogFileToLog();
+                loggedIn = true;
                 break;
             case Protocol.AUTH_DENIED:
                 putLog("Authorization failed");
@@ -233,11 +266,13 @@ public class ClientGUI extends JFrame implements ActionListener,
                 userList.setListData(usersArr);
                 break;
             case Protocol.USER_NICKNAME_CHANGE:
-                putLog(tfLogin.getText() + " is now known as " + msg);
+                putLog("You're now known as " + arr[1]);
+                break;
+            case Protocol.USER_NICKNAME_ALREADY_IN_USE:
+                putLog(arr[1]);
                 break;
             default:
                 throw new RuntimeException("Unknown message type: " + msg);
-
         }
     }
 
