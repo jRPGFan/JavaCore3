@@ -6,18 +6,22 @@ import ru.geekbrains.java_two.network.ServerSocketThreadListener;
 import ru.geekbrains.java_two.network.SocketThread;
 import ru.geekbrains.java_two.network.SocketThreadListener;
 
+import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.sql.SQLException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Vector;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
 
 public class ChatServer implements ServerSocketThreadListener, SocketThreadListener {
     private ServerSocketThread server;
     private final DateFormat DATE_FORMAT = new SimpleDateFormat("[HH:mm:ss] ");
     private ChatServerListener listener;
     private Vector<SocketThread> clients;
+    private ExecutorService executorService;
 
     public ChatServer(ChatServerListener listener) {
         this.listener = listener;
@@ -36,6 +40,7 @@ public class ChatServer implements ServerSocketThreadListener, SocketThreadListe
         if (server == null || !server.isAlive()) {
             putLog("Server is not running");
         } else {
+            executorService.shutdown();
             server.interrupt();
         }
     }
@@ -52,6 +57,7 @@ public class ChatServer implements ServerSocketThreadListener, SocketThreadListe
     public void onServerStart(ServerSocketThread thread) {
         putLog("Server socket thread started");
         SqlClient.connect();
+        executorService = Executors.newCachedThreadPool();
     }
 
     @Override
@@ -61,6 +67,8 @@ public class ChatServer implements ServerSocketThreadListener, SocketThreadListe
         for (int i = 0; i < clients.size(); i++) {
             clients.get(i).close();
         }
+        executorService.shutdown();
+        putLog("Executor service shut down");
     }
 
     @Override
@@ -77,7 +85,9 @@ public class ChatServer implements ServerSocketThreadListener, SocketThreadListe
     public void onSocketAccepted(ServerSocketThread thread, ServerSocket server, Socket socket) {
         putLog("Client connected");
         String name = "SocketThread" + socket.getInetAddress() + ":" + socket.getPort();
-        new ClientThread(this, name, socket);
+
+        new ClientThread(this, name, socket, executorService);
+//        new ClientThread(this, name, socket);
     }
 
     @Override
@@ -128,14 +138,18 @@ public class ChatServer implements ServerSocketThreadListener, SocketThreadListe
                 sendToAllAuthorizedClients(Protocol.getTypeBroadcast(client.getNickname(), arr[1]));
                 break;
             case Protocol.USER_NICKNAME_CHANGE:
-                try {
-                    if (SqlClient.changeNickname(client.getNickname(), arr[1])) {
-                        client.changeNickname(arr[1]);
-                        sendToAllAuthorizedClients(Protocol.getUserList(getUsers()));
-                    }
-                } catch (SQLException throwables) {
-                    throwables.printStackTrace();
+                String currentNickname = client.getNickname();
+                int result = SqlClient.changeNickname(currentNickname, arr[1]);
+
+                if (result == 1) {
+                    client.changeNickname(arr[1]);
+                    sendToAllAuthorizedClients(Protocol.getTypeBroadcast("Server", currentNickname +
+                            " is now known as " + arr[1]));
+                    sendToAllAuthorizedClients(Protocol.getUserList(getUsers()));
+                } else if (result == -1){
+                        client.nickNameAlreadyInUse("nickname " + arr[1] + " is already in use");
                 }
+
                 break;
             default:
                 client.msgFormatError(msg);
@@ -164,6 +178,7 @@ public class ChatServer implements ServerSocketThreadListener, SocketThreadListe
                 oldClient.reconnect();
                 clients.remove(oldClient);
             }
+            //executorService.submit(client);
         }
         sendToAllAuthorizedClients(Protocol.getUserList(getUsers()));
     }

@@ -8,12 +8,14 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.io.FileWriter;
-import java.io.IOException;
+import java.io.*;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
+import java.util.List;
 
 public class ClientGUI extends JFrame implements ActionListener,
         Thread.UncaughtExceptionHandler, SocketThreadListener {
@@ -22,6 +24,8 @@ public class ClientGUI extends JFrame implements ActionListener,
     private static final int HEIGHT = 300;
     private static final String WINDOW_TITLE = "Chat client";
     private final DateFormat DATE_FORMAT = new SimpleDateFormat("[HH:mm:ss] ");
+    private String nickname = "";
+    private boolean loggedIn = false;
 
     private final JTextArea log = new JTextArea();
 
@@ -101,6 +105,7 @@ public class ClientGUI extends JFrame implements ActionListener,
         } else if (src == btnSend || src == tfMessage) {
             sendMessage();
         } else if (src == btnLogin) {
+            log.setText(null);
             connect();
         } else if (src == btnDisconnect) {
             socketThread.close();
@@ -115,6 +120,7 @@ public class ClientGUI extends JFrame implements ActionListener,
         try {
             Socket s = new Socket(tfIPAddress.getText(), Integer.parseInt(tfPort.getText()));
             socketThread = new SocketThread(this, "Client", s);
+            socketThread.start();
         } catch (IOException e) {
             e.printStackTrace();
             showException(Thread.currentThread(), e);
@@ -132,17 +138,6 @@ public class ClientGUI extends JFrame implements ActionListener,
 //        wrtMsgToLogFile(msg, username);
     }
 
-    private void wrtMsgToLogFile(String msg, String username) {
-        try (FileWriter out = new FileWriter("log.txt", true)) {
-            out.write(username + ": " + msg + "\n");
-            out.flush();
-        } catch (IOException e) {
-            if (!shownIoErrors) {
-                shownIoErrors = true;
-                showException(Thread.currentThread(), e);
-            }
-        }
-    }
 
     private void putLog(String msg) {
         if ("".equals(msg)) return;
@@ -153,6 +148,7 @@ public class ClientGUI extends JFrame implements ActionListener,
                 log.setCaretPosition(log.getDocument().getLength());
             }
         });
+        if (loggedIn) HistoryHandler.wrtMsgToLogFile(nickname, msg);
     }
 
     private void showException(Thread t, Throwable e) {
@@ -190,6 +186,7 @@ public class ClientGUI extends JFrame implements ActionListener,
         panelTop.setVisible(true);
         setTitle(WINDOW_TITLE);
         userList.setListData(new String[0]);
+        loggedIn = false;
     }
 
     @Override
@@ -212,6 +209,9 @@ public class ClientGUI extends JFrame implements ActionListener,
                 setTitle(WINDOW_TITLE + " nickname: " + arr[1]);
                 panelBottom.setVisible(true);
                 panelTop.setVisible(false);
+                nickname = arr[1];
+                putLog(HistoryHandler.readLogFileToLog(arr[1]));
+                loggedIn = true;
                 break;
             case Protocol.AUTH_DENIED:
                 putLog("Authorization failed");
@@ -233,11 +233,13 @@ public class ClientGUI extends JFrame implements ActionListener,
                 userList.setListData(usersArr);
                 break;
             case Protocol.USER_NICKNAME_CHANGE:
-                putLog(tfLogin.getText() + " is now known as " + msg);
+                putLog("You're now known as " + arr[1]);
+                break;
+            case Protocol.USER_NICKNAME_ALREADY_IN_USE:
+                putLog(arr[1]);
                 break;
             default:
                 throw new RuntimeException("Unknown message type: " + msg);
-
         }
     }
 
