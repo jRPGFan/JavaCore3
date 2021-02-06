@@ -33,12 +33,23 @@ public class SqlClient {
         return null;
     }
 
-    public static boolean changeNickname (String currentNickname, String newNickname) throws SQLException {
-        PreparedStatement preparedStatement =
-                connection.prepareStatement("UPDATE clients SET nickname = ? WHERE nickname = ?");
-        preparedStatement.setString(1, currentNickname);
-        preparedStatement.setString(2, newNickname);
-        return preparedStatement.executeUpdate() > 0;
+    public static int changeNickname (String currentNickname, String newNickname) {
+        String checkNicknameCollision = String.format("SELECT nickname FROM clients WHERE nickname='%s'",
+                newNickname);
+        String updateQuery = String.format("UPDATE clients SET nickname='%s' WHERE nickname='%s'",
+                newNickname, currentNickname);
+
+        int result = 0;
+        try (ResultSet set = statement.executeQuery(checkNicknameCollision)){
+            if(set.next()) return -1;
+
+            result = statement.executeUpdate(updateQuery);
+            statement.close();
+        } catch (SQLException e){
+            throw new RuntimeException(e);
+        }
+        // 0 no changes, 1 changes were made
+        return result;
     }
 
     public static void disconnect() {

@@ -24,6 +24,7 @@ public class Protocol {
     public static final String USER_LIST = "/user_list";
     public static final String USER_BROADCAST = "/user_bcast";
     public static final String USER_NICKNAME_CHANGE = "/user_nickname_change";
+    public static final String USER_NICKNAME_ALREADY_IN_USE = "/nickname_in_use";
 
     public static String getUserBroadcast(String msg) {
         return USER_BROADCAST + DELIMITER + msg;
@@ -57,5 +58,9 @@ public class Protocol {
 
     public static String getUserNicknameChange(String nickname){
         return USER_NICKNAME_CHANGE + DELIMITER + nickname;
+    }
+
+    public static String nickNameAlreadyInUse(String msg){
+        return USER_NICKNAME_ALREADY_IN_USE + DELIMITER + msg;
     }
 }

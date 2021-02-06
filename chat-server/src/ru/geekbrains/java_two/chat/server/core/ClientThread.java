@@ -20,7 +20,10 @@ public class ClientThread extends SocketThread {
         return nickname;
     }
 
-    public void changeNickname(String nickname){ this.nickname = nickname; }
+    public void changeNickname(String nickname){
+        this.nickname = nickname;
+        sendMessage(Protocol.getUserNicknameChange(nickname));
+    }
 
     public boolean isAuthorized() {
         return isAuthorized;
@@ -45,6 +48,10 @@ public class ClientThread extends SocketThread {
     void msgFormatError(String msg) {
         sendMessage(Protocol.getMsgFormatError(msg));
         close();
+    }
+
+    void nickNameAlreadyInUse(String msg){
+        sendMessage(Protocol.nickNameAlreadyInUse(msg));
     }
 
     public boolean isReconnecting() {
